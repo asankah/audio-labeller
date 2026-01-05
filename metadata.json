@@ -1,0 +1,7 @@
+{
+  "name": "Audio Mel Spectrogram Annotator",
+  "description": "Capture 8 seconds of audio, visualize it as a Mel spectrogram, annotate frequency features, and replay the audio with selected regions filtered out.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
