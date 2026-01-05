@@ -4,7 +4,7 @@ import { Button } from './components/Button';
 import { Spectrogram } from './components/Spectrogram';
 import { AnnotationLayer } from './components/AnnotationLayer';
 import { Annotation, SpectrogramData, AudioState } from './types';
-import { computeSpectrogram, applyMaskAndReconstruct } from './services/audioUtils';
+import { computeSpectrogram, applyMaskAndReconstruct, audioBufferToWav } from './services/audioUtils';
 
 const RECORDING_DURATION = 8000;
 
@@ -88,7 +88,7 @@ const App: React.FC = () => {
       setZoomX(1);
       setZoomY(1);
       setPlayheadPos(0);
-      setClipName(`Capture ${new Date().toLocaleTimeString()}`);
+      setClipName(`Capture ${new Date().toLocaleTimeString().replace(/:/g, '-')}`);
       mediaRecorder.start();
       
       const startTime = Date.now();
@@ -162,6 +162,46 @@ const App: React.FC = () => {
 
   const updateAnnotationLabel = (id: string, label: string) => {
     setAnnotations(prev => prev.map(ann => ann.id === id ? { ...ann, label } : ann));
+  };
+
+  const handleSaveData = () => {
+    if (!audioState?.buffer) return;
+
+    const baseName = clipName.trim() || 'untitled-recording';
+    
+    // 1. Save WAV
+    const wavBlob = audioBufferToWav(audioState.buffer);
+    const wavUrl = URL.createObjectURL(wavBlob);
+    const wavLink = document.createElement('a');
+    wavLink.href = wavUrl;
+    wavLink.download = `${baseName}.wav`;
+    wavLink.click();
+    URL.revokeObjectURL(wavUrl);
+
+    // 2. Save JSON
+    const jsonData = {
+      name: clipName,
+      sample_rate: audioState.sampleRate,
+      length: audioState.duration,
+      features: annotations.map(ann => ({
+        start: ann.x * audioState.duration,
+        duration: ann.width * audioState.duration,
+        label: (ann.label || '')
+          .split(',')
+          .map(l => l.trim())
+          .filter(l => l.length > 0)
+      }))
+    };
+    
+    const jsonBlob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+    const jsonLink = document.createElement('a');
+    jsonLink.href = jsonUrl;
+    jsonLink.download = `${baseName}.json`;
+    jsonLink.click();
+    URL.revokeObjectURL(jsonUrl);
+    
+    setStatus('Research data saved to downloads.');
   };
 
   useEffect(() => {
@@ -299,6 +339,15 @@ const App: React.FC = () => {
               >
                 {isPlaying && isFiltered ? '⏸ Stop' : '▶ Play Filtered'}
               </Button>
+              <Button 
+                onClick={handleSaveData}
+                variant="secondary"
+                disabled={!audioState || isRecording}
+                className="text-sm px-4 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30"
+                title="Download Research Data"
+              >
+                💾 Save
+              </Button>
             </div>
 
             <div className="flex items-center gap-4">
@@ -396,8 +445,8 @@ const App: React.FC = () => {
                   <div className="text-xs text-slate-400">Silences the entire frequency range for the duration.</div>
                </div>
                <div className="bg-slate-900 p-3 rounded border border-slate-700">
-                  <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Clip Context</div>
-                  <div className="text-xs text-slate-400">Name your clips to organize your research findings.</div>
+                  <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Export Research</div>
+                  <div className="text-xs text-slate-400">Save your work as standardized WAV and JSON files.</div>
                </div>
             </div>
           </div>
@@ -427,7 +476,7 @@ const App: React.FC = () => {
                     <div className="flex gap-2">
                       <input 
                         type="text"
-                        placeholder="Assign a label (e.g. Click, Pop, Thump)"
+                        placeholder="Assign labels (comma separated: click, pop)"
                         value={ann.label || ''}
                         onChange={(e) => updateAnnotationLabel(ann.id, e.target.value)}
                         className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all"
